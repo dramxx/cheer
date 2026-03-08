@@ -1,3 +1,5 @@
 - chessboard is small, needs to be reorganized
-- time controlls are sus
+- time controlls are sus (first game seems ignored?)
 - rematch/leave game flows are messy
+- after rematch, colors are switched
+- refactor
