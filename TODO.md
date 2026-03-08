@@ -1,0 +1,3 @@
+- chessboard is small, needs to be reorganized
+- time controlls are sus
+- rematch/leave game flows are messy

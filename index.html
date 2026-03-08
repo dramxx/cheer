@@ -1,0 +1,959 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Peer Chess</title>
+    
+    <!-- External Libraries -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/chess.js/0.10.3/chess.min.js"></script>
+    <script src="https://unpkg.com/peerjs@1.5.2/dist/peerjs.min.js"></script>
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/cm-chessboard@8.5.0/assets/chessboard.css">
+    
+    <!-- Chessboard ES6 Module -->
+    <script type="module">
+        import { Chessboard, COLOR, FEN, INPUT_EVENT_TYPE } from "https://cdn.jsdelivr.net/npm/cm-chessboard@8.5.0/src/Chessboard.js";
+        window.Chessboard = Chessboard;
+        window.COLOR = COLOR;
+        window.FEN = FEN;
+        window.INPUT_EVENT_TYPE = INPUT_EVENT_TYPE;
+    </script>
+
+    <style>
+        :root {
+            --bg-primary: #1a1a2e;
+            --bg-secondary: #16213e;
+            --bg-tertiary: #0f3460;
+            --text-primary: #e0e0e0;
+            --text-secondary: #a0a0a0;
+            --accent: #4a90d9;
+            --accent-hover: #5aa0e9;
+            --success: #4caf50;
+            --error: #f44336;
+        }
+
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: var(--bg-primary);
+            color: var(--text-primary);
+            min-height: 100vh;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+        }
+
+        .container { width: 100%; max-width: 600px; padding: 20px; }
+
+        .view { display: none; flex-direction: column; align-items: center; gap: 20px; }
+        .view.active { display: flex; }
+
+        h1 {
+            font-size: 3rem;
+            margin-bottom: 10px;
+            background: linear-gradient(135deg, var(--accent), #9b59b6);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+        }
+
+        .subtitle { color: var(--text-secondary); font-size: 1.1rem; margin-bottom: 30px; }
+
+        .btn {
+            padding: 15px 40px;
+            font-size: 1.1rem;
+            border: none;
+            border-radius: 8px;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            font-weight: 600;
+            min-width: 200px;
+        }
+
+        .btn-primary { background: var(--accent); color: white; }
+        .btn-primary:hover { background: var(--accent-hover); transform: translateY(-2px); box-shadow: 0 4px 15px rgba(74, 144, 217, 0.4); }
+        .btn-secondary { background: var(--bg-tertiary); color: var(--text-primary); }
+        .btn-secondary:hover { background: #1a4a7a; transform: translateY(-2px); }
+        .btn-danger { background: var(--error); color: white; }
+        .btn-danger:hover { background: #d32f2f; }
+        .btn-success { background: var(--success); color: white; }
+        .btn-success:hover { background: #45a049; }
+
+        .form-group { width: 100%; max-width: 300px; }
+        label { display: block; margin-bottom: 8px; color: var(--text-secondary); }
+
+        input, select {
+            width: 100%;
+            padding: 12px;
+            font-size: 1rem;
+            border: 2px solid var(--bg-tertiary);
+            border-radius: 8px;
+            background: var(--bg-secondary);
+            color: var(--text-primary);
+            outline: none;
+            transition: border-color 0.3s;
+        }
+
+        input:focus, select:focus { border-color: var(--accent); }
+
+        .time-controls { display: flex; flex-direction: column; gap: 10px; width: 100%; max-width: 300px; }
+
+        .time-option {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            padding: 10px;
+            background: var(--bg-secondary);
+            border-radius: 8px;
+            cursor: pointer;
+            transition: background 0.3s;
+        }
+
+        .time-option:hover { background: var(--bg-tertiary); }
+        .time-option input[type="radio"] { width: auto; }
+
+        .status { padding: 15px 25px; border-radius: 8px; font-size: 1rem; text-align: center; }
+        .status-connecting { background: rgba(74, 144, 217, 0.2); color: var(--accent); }
+        .status-waiting { background: rgba(255, 193, 7, 0.2); color: #ffc107; }
+        .status-connected { background: rgba(76, 175, 80, 0.2); color: var(--success); }
+        .status-error { background: rgba(244, 67, 54, 0.2); color: var(--error); }
+
+        .session-code {
+            font-size: 2.5rem;
+            font-weight: bold;
+            letter-spacing: 8px;
+            color: var(--accent);
+            background: var(--bg-secondary);
+            padding: 15px 30px;
+            border-radius: 8px;
+        }
+
+        .copy-btn { padding: 8px 16px; font-size: 0.9rem; margin-top: 10px; }
+
+        /* Game View */
+        #game-view { width: 100%; max-width: 1400px; }
+
+        .game-header { display: flex; justify-content: space-between; align-items: center; width: 100%; margin-bottom: 20px; }
+
+        .player-info { display: flex; align-items: center; gap: 10px; padding: 10px 15px; background: var(--bg-secondary); border-radius: 8px; }
+
+        .player-color { width: 20px; height: 20px; border-radius: 50%; }
+        .player-color.white { background: #fff; border: 2px solid #000; }
+        .player-color.black { background: #000; border: 2px solid #fff; }
+        .player-color.active { box-shadow: 0 0 10px var(--accent); }
+
+        .timer { font-size: 1.5rem; font-weight: bold; font-family: 'Courier New', monospace; }
+        .timer.active { color: var(--accent); }
+
+        .board-container { display: flex; justify-content: center; align-items: center; margin: 20px 0; }
+        #board { width: 100%; max-width: 1200px; aspect-ratio: 1; }
+
+        .game-status { font-size: 1.2rem; text-align: center; padding: 15px; background: var(--bg-secondary); border-radius: 8px; width: 100%; }
+        .game-status.check { background: rgba(244, 67, 54, 0.2); color: #f44336; }
+
+        .game-controls { display: flex; gap: 10px; flex-wrap: wrap; justify-content: center; }
+        .game-controls .btn { min-width: 120px; padding: 10px 20px; font-size: 1rem; }
+
+        .captured-pieces { display: flex; gap: 5px; min-height: 30px; padding: 5px; background: var(--bg-secondary); border-radius: 5px; flex-wrap: wrap; }
+        .captured-piece { font-size: 1.2rem; }
+
+        /* Modal */
+        .modal-overlay { position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0, 0, 0, 0.8); display: none; justify-content: center; align-items: center; z-index: 1000; }
+        .modal-overlay.active { display: flex; }
+        .modal { background: var(--bg-secondary); padding: 30px; border-radius: 15px; text-align: center; max-width: 400px; width: 90%; }
+        .modal h2 { margin-bottom: 15px; font-size: 1.8rem; }
+        .modal p { margin-bottom: 25px; color: var(--text-secondary); }
+        .modal-buttons { display: flex; gap: 10px; justify-content: center; flex-wrap: wrap; }
+
+        /* Toast */
+        .toast { position: fixed; bottom: 20px; left: 50%; transform: translateX(-50%); background: var(--bg-tertiary); color: var(--text-primary); padding: 12px 24px; border-radius: 8px; opacity: 0; transition: opacity 0.3s; z-index: 1001; }
+        .toast.show { opacity: 1; }
+    </style>
+</head>
+<body>
+    <!-- ═══════════════════════════════════════════════════════════════
+         VIEWS
+    ═══════════════════════════════════════════════════════════════ -->
+    <div class="container">
+        <!-- Home View -->
+        <div id="home-view" class="view active">
+            <h1>Peer Chess</h1>
+            <button class="btn btn-primary" id="create-game-btn">Create Game</button>
+            <button class="btn btn-secondary" id="join-game-btn">Join Game</button>
+        </div>
+
+        <!-- Lobby View -->
+        <div id="lobby-view" class="view">
+            <h2>Lobby</h2>
+            <div id="host-lobby" style="display: none;">
+                <p>Share this code with your opponent:</p>
+                <div class="session-code" id="session-code-display">------</div>
+                <div class="form-group">
+                    <label>Time Control</label>
+                    <div class="time-controls">
+                        <label class="time-option">
+                            <input type="radio" name="time" value="60"><span>1 minute</span>
+                        </label>
+                        <label class="time-option">
+                            <input type="radio" name="time" value="300" checked><span>5 minutes</span>
+                        </label>
+                        <label class="time-option">
+                            <input type="radio" name="time" value="600"><span>10 minutes</span>
+                        </label>
+                        <label class="time-option">
+                            <input type="radio" name="time" value="0"><span>Unlimited</span>
+                        </label>
+                    </div>
+                </div>
+                <button class="btn btn-secondary copy-btn" id="copy-code-btn">Copy Code</button>
+                <div class="status status-waiting" id="host-status">Waiting for opponent...</div>
+                <button class="btn btn-danger" id="host-cancel-btn">Cancel</button>
+            </div>
+            <div id="guest-lobby" style="display: none;">
+                <div class="form-group">
+                    <label for="session-code-input">Enter Session Code</label>
+                    <input type="text" id="session-code-input" placeholder="XXXX" maxlength="6" autocomplete="off">
+                </div>
+                <div class="status status-connecting" id="guest-status">Enter code to join</div>
+                <button class="btn btn-primary" id="join-btn">Join</button>
+                <button class="btn btn-danger" id="guest-cancel-btn">Cancel</button>
+            </div>
+        </div>
+
+        <!-- Game View -->
+        <div id="game-view" class="view">
+            <div class="game-header">
+                <div class="player-info">
+                    <div class="player-color white" id="white-indicator"></div>
+                    <span>White: <span id="white-timer" class="timer">05:00</span></span>
+                </div>
+                <div class="player-info">
+                    <div class="player-color black" id="black-indicator"></div>
+                    <span>Black: <span id="black-timer" class="timer">05:00</span></span>
+                </div>
+            </div>
+            <div class="board-container">
+                <div id="board"></div>
+            </div>
+            <div class="game-status" id="game-status">White to move</div>
+            <div class="game-controls">
+                <button class="btn btn-secondary" id="resign-btn">Resign</button>
+                <button class="btn btn-secondary" id="rematch-btn">Request Rematch</button>
+                <button class="btn btn-danger" id="leave-btn">Leave Game</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Modals -->
+    <div class="modal-overlay" id="game-over-modal">
+        <div class="modal">
+            <h2 id="game-over-title">Game Over</h2>
+            <p id="game-over-message">Result here</p>
+            <div class="modal-buttons">
+                <button class="btn btn-primary" id="rematch-accept-btn">Accept Rematch</button>
+                <button class="btn btn-secondary" id="rematch-decline-btn">Decline</button>
+            </div>
+        </div>
+    </div>
+
+    <div class="modal-overlay" id="disconnect-modal">
+        <div class="modal">
+            <h2>Connection Lost</h2>
+            <p id="disconnect-message">Opponent disconnected</p>
+            <div class="modal-buttons">
+                <button class="btn btn-primary" id="reconnect-btn">Wait</button>
+                <button class="btn btn-secondary" id="disconnect-leave-btn">Leave</button>
+            </div>
+        </div>
+    </div>
+
+    <div class="toast" id="toast">Copied to clipboard!</div>
+
+    <!-- ═══════════════════════════════════════════════════════════════
+         JAVASCRIPT
+    ═══════════════════════════════════════════════════════════════ -->
+    <script>
+    (function() {
+        "use strict";
+
+        // ─────────────────────────────────────────────────────────────────
+        // CONSTANTS
+        // ─────────────────────────────────────────────────────────────────
+        const PEER_PREFIX = "cheer";
+        const CHESS_ASSETS_URL = "https://cdn.jsdelivr.net/npm/cm-chessboard@8.5.0/assets/";
+
+        const VALID_SESSION_CHARS = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
+
+        // ─────────────────────────────────────────────────────────────────
+        // STATE
+        // ─────────────────────────────────────────────────────────────────
+        const state = {
+            currentView: "home",
+            isHost: false,
+            myColor: "white",
+            peer: null,
+            conn: null,
+            game: null,
+            board: null,
+            sessionCode: null,
+            timeControl: 300,
+            timers: { white: 300, black: 300 },
+            timerInterval: null,
+            gameActive: false,
+            rematchRequested: false
+        };
+
+        // ─────────────────────────────────────────────────────────────────
+        // DOM REFERENCES
+        // ─────────────────────────────────────────────────────────────────
+        const views = {
+            home: document.getElementById("home-view"),
+            lobby: document.getElementById("lobby-view"),
+            game: document.getElementById("game-view")
+        };
+
+        const dom = {
+            hostLobby: document.getElementById("host-lobby"),
+            guestLobby: document.getElementById("guest-lobby"),
+            sessionCodeDisplay: document.getElementById("session-code-display"),
+            sessionCodeInput: document.getElementById("session-code-input"),
+            hostStatus: document.getElementById("host-status"),
+            guestStatus: document.getElementById("guest-status"),
+            whiteTimer: document.getElementById("white-timer"),
+            blackTimer: document.getElementById("black-timer"),
+            whiteIndicator: document.getElementById("white-indicator"),
+            blackIndicator: document.getElementById("black-indicator"),
+            gameStatus: document.getElementById("game-status"),
+            board: document.getElementById("board"),
+            gameOverModal: document.getElementById("game-over-modal"),
+            gameOverTitle: document.getElementById("game-over-title"),
+            gameOverMessage: document.getElementById("game-over-message"),
+            disconnectModal: document.getElementById("disconnect-modal"),
+            toast: document.getElementById("toast")
+        };
+
+        // ─────────────────────────────────────────────────────────────────
+        // UTILITY FUNCTIONS
+        // ─────────────────────────────────────────────────────────────────
+        function generateSessionCode() {
+            const chars = VALID_SESSION_CHARS;
+            let code = "";
+            for (let i = 0; i < 4; i++) {
+                code += chars.charAt(Math.floor(Math.random() * chars.length));
+            }
+            return code;
+        }
+
+        function validateSessionCode(code) {
+            if (!code || code.length < 4 || code.length > 6) return false;
+            return code.split("").every(c => VALID_SESSION_CHARS.includes(c));
+        }
+
+        function getSelectedTimeControl() {
+            const radios = document.getElementsByName("time");
+            for (const radio of radios) {
+                if (radio.checked) return parseInt(radio.value);
+            }
+            return 300;
+        }
+
+        function formatTime(seconds) {
+            if (state.timeControl === 0) return "∞";
+            const mins = Math.floor(seconds / 60);
+            const secs = seconds % 60;
+            return `${mins.toString().padStart(2, "0")}:${secs.toString().padStart(2, "0")}`;
+        }
+
+        function showToast(message) {
+            dom.toast.textContent = message;
+            dom.toast.classList.add("show");
+            setTimeout(() => dom.toast.classList.remove("show"), 2000);
+        }
+
+        function waitForChessboard(callback) {
+            if (window.Chessboard && window.COLOR && window.FEN && window.INPUT_EVENT_TYPE) {
+                callback();
+            } else {
+                setTimeout(() => waitForChessboard(callback), 50);
+            }
+        }
+
+        // ─────────────────────────────────────────────────────────────────
+        // VIEW MANAGEMENT
+        // ─────────────────────────────────────────────────────────────────
+        function showView(viewName) {
+            Object.values(views).forEach(v => v.classList.remove("active"));
+            views[viewName].classList.add("active");
+            state.currentView = viewName;
+        }
+
+        function updateHostStatus(message, type = "waiting") {
+            dom.hostStatus.textContent = message;
+            dom.hostStatus.className = "status status-" + type;
+        }
+
+        function updateGuestStatus(message, type = "connecting") {
+            dom.guestStatus.textContent = message;
+            dom.guestStatus.className = "status status-" + type;
+        }
+
+        // ─────────────────────────────────────────────────────────────────
+        // NETWORKING (PeerJS)
+        // ─────────────────────────────────────────────────────────────────
+        function createHostGame() {
+            const sessionCode = dom.sessionCodeDisplay.textContent;
+            const peerId = PEER_PREFIX + "-" + sessionCode;
+
+            updateHostStatus("Creating game...", "connecting");
+
+            state.peer = new Peer(peerId, { debug: 1 });
+
+            state.peer.on("open", (id) => {
+                console.log("Host peer opened:", id);
+                updateHostStatus("Waiting for opponent...", "waiting");
+            });
+
+            state.peer.on("connection", (conn) => handleHostConnection(conn));
+
+            state.peer.on("error", (err) => {
+                console.error("Host peer error:", err);
+                if (err.type === "unavailable-id") {
+                    updateHostStatus("Session code already in use. Try again.", "error");
+                } else if (err.type === "peer-unavailable") {
+                    updateHostStatus("Game not found", "error");
+                } else {
+                    updateHostStatus("Connection error: " + err.type, "error");
+                }
+            });
+
+            state.peer.on("disconnected", () => {
+                updateHostStatus("Disconnected. Trying to reconnect...", "error");
+            });
+        }
+
+        function handleHostConnection(conn) {
+            state.conn = conn;
+
+            conn.on("open", () => {
+                console.log("Guest connected:", conn.peer);
+                updateHostStatus("Opponent connected!", "connected");
+
+                conn.send({
+                    type: "config",
+                    timeControl: state.timeControl,
+                    hostColor: "white"
+                });
+
+                state.myColor = "white";
+                startGame();
+            });
+
+            conn.on("data", (data) => handleMessage(data));
+            conn.on("close", () => handleDisconnect());
+            conn.on("error", (err) => {
+                console.error("Connection error:", err);
+                handleDisconnect();
+            });
+        }
+
+        function connectAsGuest(sessionCode) {
+            const peerId = PEER_PREFIX + "-" + sessionCode;
+
+            updateGuestStatus("Connecting...", "connecting");
+
+            state.peer = new Peer({ debug: 1 });
+
+            state.peer.on("open", (id) => {
+                console.log("Guest peer opened:", id);
+                state.conn = state.peer.connect(peerId);
+
+                state.conn.on("open", () => {
+                    console.log("Connected to host:", peerId);
+                    updateGuestStatus("Waiting for host...", "connecting");
+                });
+
+                state.conn.on("data", (data) => handleMessage(data));
+                state.conn.on("close", () => handleDisconnect());
+                state.conn.on("error", (err) => {
+                    console.error("Connection error:", err);
+                    updateGuestStatus("Connection failed", "error");
+                });
+            });
+
+            state.peer.on("error", (err) => {
+                console.error("Guest peer error:", err);
+                if (err.type === "peer-unavailable") {
+                    updateGuestStatus("Game not found", "error");
+                } else {
+                    updateGuestStatus("Connection error: " + err.type, "error");
+                }
+            });
+        }
+
+        function sendMessage(data) {
+            if (state.conn && state.conn.open) {
+                state.conn.send(data);
+            }
+        }
+
+        // ─────────────────────────────────────────────────────────────────
+        // MESSAGE HANDLING
+        // ─────────────────────────────────────────────────────────────────
+        function handleMessage(data) {
+            console.log("Received message:", data);
+
+            switch (data.type) {
+                case "config":
+                    state.timeControl = data.timeControl;
+                    if (data.hostColor === "white") {
+                        state.myColor = "black";
+                    }
+                    updateGuestStatus("Connected!", "connected");
+                    startGame();
+                    break;
+
+                case "move":
+                    if (state.game && state.board) {
+                        const move = state.game.move(data.move);
+                        if (move) {
+                            state.board.setPosition(state.game.fen());
+                            updateGameStatus();
+                            switchTimer();
+                        }
+                    }
+                    break;
+
+                case "rematch":
+                    showRematchRequestModal();
+                    break;
+
+                case "rematch-accept":
+                    acceptRematch();
+                    break;
+
+                case "resign":
+                    handleResignation(data.from);
+                    break;
+
+                case "ping":
+                    break;
+            }
+        }
+
+        // ─────────────────────────────────────────────────────────────────
+        // GAME LOGIC
+        // ─────────────────────────────────────────────────────────────────
+        function startGame() {
+            showView("game");
+            state.game = new Chess();
+            initChessBoard();
+            initTimers();
+            updateGameStatus();
+            state.gameActive = true;
+            startPingInterval();
+        }
+
+        function tryMove(from, to) {
+            if (!state.game || !state.board) return null;
+
+            const move = state.game.move({ from, to, promotion: "q" });
+
+            if (move) {
+                state.board.setPosition(state.game.fen());
+                sendMessage({ type: "move", move: { from, to, promotion: "q" } });
+                updateGameStatus();
+                switchTimer();
+                checkGameEnd();
+            }
+
+            return move;
+        }
+
+        function checkGameEnd() {
+            if (state.game.in_checkmate()) {
+                state.gameActive = false;
+                const winner = state.game.turn() === "w" ? "Black" : "White";
+                showGameOver("Checkmate! " + winner + " wins!");
+            } else if (state.game.in_stalemate()) {
+                state.gameActive = false;
+                showGameOver("Stalemate - Draw");
+            } else if (state.game.in_draw()) {
+                state.gameActive = false;
+                showGameOver("Draw");
+            }
+        }
+
+        function handleResignation(who) {
+            state.gameActive = false;
+            stopTimer();
+            const winner = who === "white" ? "Black" : "White";
+            showGameOver(winner + " wins!");
+        }
+
+        function showGameOver(message) {
+            dom.gameOverTitle.textContent = "Game Over";
+            dom.gameOverMessage.textContent = message;
+            dom.gameOverModal.classList.add("active");
+        }
+
+        function showRematchRequestModal() {
+            dom.gameOverTitle.textContent = "Rematch Request";
+            dom.gameOverMessage.textContent = "Opponent wants a rematch!";
+            dom.gameOverModal.classList.add("active");
+        }
+
+        function acceptRematch() {
+            // Swap colors
+            state.myColor = state.myColor === "white" ? "black" : "white";
+            
+            // Reset game
+            state.game = new Chess();
+
+            // Destroy and recreate board
+            if (state.board) {
+                state.board.destroy();
+                state.board = null;
+            }
+            
+            // Stop existing timers
+            if (state.timerInterval) {
+                clearInterval(state.timerInterval);
+                state.timerInterval = null;
+            }
+
+            // Reinitialize - will create new board and timers
+            state.gameActive = true;
+            showView("game");
+            initChessBoard();
+            initTimers();
+            updateGameStatus();
+            startPingInterval();
+            
+            showToast("Rematch started! You are " + state.myColor);
+        }
+
+        // ─────────────────────────────────────────────────────────────────
+        // BOARD MANAGEMENT
+        // ─────────────────────────────────────────────────────────────────
+        function initChessBoard() {
+            waitForChessboard(() => {
+                dom.board.innerHTML = "";
+                const orientation = state.myColor === "white" ? window.COLOR.white : window.COLOR.black;
+
+                state.board = new window.Chessboard(dom.board, {
+                    position: window.FEN.start,
+                    orientation: orientation,
+                    assetsUrl: CHESS_ASSETS_URL,
+                    style: { cssClass: "default", showCoordinates: true }
+                });
+
+                enableMoveInput();
+            });
+        }
+
+        function enableMoveInput() {
+            if (!state.board || !state.game) return;
+
+            const myColorEnum = state.myColor === "white" ? window.COLOR.white : window.COLOR.black;
+
+            state.board.enableMoveInput((event) => {
+                switch (event.type) {
+                    case window.INPUT_EVENT_TYPE.moveInputStarted:
+                        const piece = state.game.get(event.squareFrom);
+                        if (!piece || piece.color !== state.myColor.charAt(0)) {
+                            return false;
+                        }
+                        return true;
+
+                    case window.INPUT_EVENT_TYPE.validateMoveInput:
+                        return tryMove(event.squareFrom, event.squareTo) !== null;
+
+                    case window.INPUT_EVENT_TYPE.moveInputFinished:
+                        break;
+                }
+            }, myColorEnum);
+        }
+
+        function updateGameStatus() {
+            const statusEl = dom.gameStatus;
+            statusEl.classList.remove("check");
+
+            let status = "";
+
+            if (state.game.in_check()) {
+                statusEl.classList.add("check");
+                status = "Check! ";
+            }
+
+            const turn = state.game.turn() === "w" ? "White" : "Black";
+
+            if (state.game.in_checkmate()) {
+                status = "Checkmate! " + (state.game.turn() === "w" ? "Black" : "White") + " wins!";
+            } else if (state.game.in_stalemate()) {
+                status = "Stalemate - Draw";
+            } else if (state.game.in_draw()) {
+                status = "Draw";
+            } else {
+                status += turn + " to move";
+            }
+
+            statusEl.textContent = status;
+
+            const currentTurn = state.game.turn();
+            dom.whiteIndicator.classList.toggle("active", currentTurn === "w");
+            dom.blackIndicator.classList.toggle("active", currentTurn === "b");
+
+            updateInputState();
+        }
+
+        function updateInputState() {
+            if (!state.board || !state.gameActive) return;
+
+            const myTurn = state.game.turn() === state.myColor.charAt(0);
+
+            if (myTurn) {
+                const myColorEnum = state.myColor === "white" ? window.COLOR.white : window.COLOR.black;
+                state.board.enableMoveInput((event) => {
+                    switch (event.type) {
+                        case window.INPUT_EVENT_TYPE.moveInputStarted:
+                            const piece = state.game.get(event.squareFrom);
+                            if (!piece || piece.color !== state.myColor.charAt(0)) {
+                                return false;
+                            }
+                            return true;
+                        case window.INPUT_EVENT_TYPE.validateMoveInput:
+                            return tryMove(event.squareFrom, event.squareTo) !== null;
+                    }
+                }, myColorEnum);
+            } else {
+                state.board.disableMoveInput();
+            }
+        }
+
+        // ─────────────────────────────────────────────────────────────────
+        // TIMER SYSTEM
+        // ─────────────────────────────────────────────────────────────────
+        function initTimers() {
+            state.timers = { white: state.timeControl, black: state.timeControl };
+            updateTimerDisplay();
+
+            if (state.timeControl > 0) {
+                switchTimer();
+            }
+        }
+
+        function switchTimer() {
+            if (state.timeControl === 0) return;
+
+            if (state.timerInterval) {
+                clearInterval(state.timerInterval);
+            }
+
+            const currentTurn = state.game.turn();
+            const colorKey = currentTurn === "w" ? "white" : "black";
+
+            state.timerInterval = setInterval(() => {
+                if (!state.gameActive) return;
+
+                state.timers[colorKey]--;
+                updateTimerDisplay();
+
+                if (state.timers[colorKey] <= 0) {
+                    handleTimeout(colorKey);
+                }
+            }, 1000);
+        }
+
+        function stopTimer() {
+            if (state.timerInterval) {
+                clearInterval(state.timerInterval);
+                state.timerInterval = null;
+            }
+        }
+
+        function updateTimerDisplay() {
+            if (state.timeControl === 0) {
+                dom.whiteTimer.textContent = "∞";
+                dom.blackTimer.textContent = "∞";
+            } else {
+                dom.whiteTimer.textContent = formatTime(state.timers.white);
+                dom.blackTimer.textContent = formatTime(state.timers.black);
+            }
+
+            const currentTurn = state.game ? state.game.turn() : "w";
+            dom.whiteTimer.classList.toggle("active", currentTurn === "w");
+            dom.blackTimer.classList.toggle("active", currentTurn === "b");
+        }
+
+        function handleTimeout(loserColor) {
+            stopTimer();
+            state.gameActive = false;
+            const winner = loserColor === "white" ? "Black" : "White";
+            showGameOver(winner + " wins on time!");
+        }
+
+        // ─────────────────────────────────────────────────────────────────
+        // CONNECTION MONITORING
+        // ─────────────────────────────────────────────────────────────────
+        let pingInterval = null;
+
+        function startPingInterval() {
+            if (pingInterval) clearInterval(pingInterval);
+            pingInterval = setInterval(() => {
+                if (state.conn && state.conn.open) {
+                    sendMessage({ type: "ping" });
+                }
+            }, 30000);
+        }
+
+        function stopPingInterval() {
+            if (pingInterval) {
+                clearInterval(pingInterval);
+                pingInterval = null;
+            }
+        }
+
+        function handleDisconnect() {
+            stopTimer();
+            state.gameActive = false;
+            dom.disconnectModal.classList.add("active");
+        }
+
+        function cleanupGame() {
+            stopPingInterval();
+            stopTimer();
+            if (state.board) {
+                state.board.destroy();
+                state.board = null;
+            }
+            if (state.peer) {
+                state.peer.destroy();
+                state.peer = null;
+            }
+            state.game = null;
+            state.conn = null;
+            state.gameActive = false;
+        }
+
+        // ─────────────────────────────────────────────────────────────────
+        // EVENT HANDLERS - Lobby
+        // ─────────────────────────────────────────────────────────────────
+        function initHostLobby() {
+            dom.sessionCodeDisplay.textContent = generateSessionCode();
+            state.timeControl = getSelectedTimeControl();
+            updateHostStatus("Waiting for opponent...", "waiting");
+            setTimeout(() => createHostGame(), 100);
+        }
+
+        function initGuestLobby() {
+            updateGuestStatus("Enter code to join", "connecting");
+        }
+
+        document.getElementById("create-game-btn").addEventListener("click", () => {
+            showView("lobby");
+            dom.hostLobby.style.display = "block";
+            dom.guestLobby.style.display = "none";
+            state.isHost = true;
+            initHostLobby();
+        });
+
+        document.getElementById("join-game-btn").addEventListener("click", () => {
+            showView("lobby");
+            dom.hostLobby.style.display = "none";
+            dom.guestLobby.style.display = "block";
+            state.isHost = false;
+            initGuestLobby();
+        });
+
+        document.getElementById("host-cancel-btn").addEventListener("click", () => {
+            cleanupGame();
+            showView("home");
+        });
+
+        document.getElementById("guest-cancel-btn").addEventListener("click", () => {
+            cleanupGame();
+            showView("home");
+        });
+
+        dom.sessionCodeInput.addEventListener("input", (e) => {
+            e.target.value = e.target.value.toUpperCase().replace(/[^A-Z0-9]/g, "");
+            const code = e.target.value;
+            if (validateSessionCode(code)) {
+                updateGuestStatus("Ready to join", "waiting");
+            } else if (code.length > 0) {
+                updateGuestStatus("Invalid code", "error");
+            } else {
+                updateGuestStatus("Enter code to join", "connecting");
+            }
+        });
+
+        document.getElementById("join-btn").addEventListener("click", () => {
+            const code = dom.sessionCodeInput.value.toUpperCase();
+            if (!validateSessionCode(code)) {
+                updateGuestStatus("Invalid session code", "error");
+                return;
+            }
+            state.sessionCode = code;
+            connectAsGuest(code);
+        });
+
+        document.getElementById("copy-code-btn").addEventListener("click", () => {
+            const code = dom.sessionCodeDisplay.textContent;
+            navigator.clipboard.writeText(code);
+            showToast("Copied to clipboard!");
+        });
+
+        // ─────────────────────────────────────────────────────────────────
+        // EVENT HANDLERS - Game Controls
+        // ─────────────────────────────────────────────────────────────────
+        document.getElementById("resign-btn").addEventListener("click", () => {
+            if (confirm("Are you sure you want to resign?")) {
+                handleResignation(state.myColor);
+                sendMessage({ type: "resign", from: state.myColor });
+            }
+        });
+
+        document.getElementById("rematch-btn").addEventListener("click", () => {
+            sendMessage({ type: "rematch" });
+            showToast("Rematch requested");
+        });
+
+        document.getElementById("leave-btn").addEventListener("click", () => {
+            sendMessage({ type: "resign", from: state.myColor });
+            cleanupGame();
+            showView("home");
+        });
+
+        document.getElementById("rematch-accept-btn").addEventListener("click", () => {
+            dom.gameOverModal.classList.remove("active");
+            sendMessage({ type: "rematch-accept" });
+            acceptRematch();
+        });
+
+        document.getElementById("rematch-decline-btn").addEventListener("click", () => {
+            dom.gameOverModal.classList.remove("active");
+            cleanupGame();
+            showView("home");
+        });
+
+        document.getElementById("disconnect-leave-btn").addEventListener("click", () => {
+            dom.disconnectModal.classList.remove("active");
+            cleanupGame();
+            showView("home");
+        });
+
+        document.getElementById("reconnect-btn").addEventListener("click", () => {
+            dom.disconnectModal.classList.remove("active");
+            if (state.isHost) {
+                updateHostStatus("Reconnecting...", "connecting");
+            } else {
+                updateGuestStatus("Reconnecting...", "connecting");
+            }
+        });
+
+        console.log("Peer Chess initialized");
+    })();
+    </script>
+</body>
+</html>
